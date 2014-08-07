@@ -90,13 +90,13 @@ LOCAL_MODULE    := libJsonCpp
 LOCAL_SRC_FILES := libJsonCpp.a
 include $(PREBUILT_STATIC_LIBRARY)
 
-# AerialAssist
+# FrcSim
 LOCAL_PATH := $(SAMPLE_PATH)
 include $(CLEAR_VARS)
 
-LOCAL_MODULE    := AerialAssist
+LOCAL_MODULE    := FrcSim
 LOCAL_SRC_FILES := ../../GamePlay/gameplay/src/gameplay-main-android.cpp \
-		AerialAssist.cpp
+		FrcSim.cpp
 LOCAL_CPP_FEATURES += rtti exceptions
 LOCAL_LDLIBS    := -llog -landroid -lEGL -lGLESv2 -lOpenSLES 
 LOCAL_CFLAGS    := -D__ANDROID__ -Wno-psabi 
