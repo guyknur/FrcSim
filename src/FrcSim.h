@@ -16,6 +16,9 @@ class AerialAssist: public Game
 {
 public:
 
+    const static GFileName _kFieldBundle;
+    const static GFileName _kRobotBundle;
+    
     /**
      * Constructor.
      */
@@ -58,11 +61,18 @@ protected:
      */
     void setMaterial(Node* node_ptr, const char* diffuse_string_ptr, const char* normal_string_ptr, float specularity);
     
+    /**
+     *
+     */
+    static void drawFrameRate(Font* font, const Vector4& color, unsigned int x, unsigned int y, unsigned int fps);
+    
     // render variables & methods
     Node* _camera_h_node;
     Node* _camera_v_node;
     Node* _spotlight_node;
     Node* _floor_node;
+    Node* _robot_node;
+    Node* _catapult_node;
     Camera* _camera;
     Node* _light_node;
     Light* _light;
@@ -110,6 +120,7 @@ private:
     
     vector<Node*> _renderQueues[QUEUE_COUNT];
     Scene* _scene;
+    Font* _font;
     bool _wireframe;
     
     map<string, GPair<string, bool> > textureList;
