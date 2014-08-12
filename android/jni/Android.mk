@@ -92,10 +92,12 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 # FrcSim
 LOCAL_PATH := $(SAMPLE_PATH)
+NDK_TOOLCHAIN_VERSION=4.8
 include $(CLEAR_VARS)
 
 LOCAL_MODULE    := FrcSim
 LOCAL_SRC_FILES := ../../GamePlay/gameplay/src/gameplay-main-android.cpp \
+		Robot.cpp \
 		FrcSim.cpp
 LOCAL_CPP_FEATURES += rtti exceptions
 LOCAL_LDLIBS    := -llog -landroid -lEGL -lGLESv2 -lOpenSLES 
@@ -109,6 +111,7 @@ LOCAL_C_INCLUDES := ../../GamePlay/external-deps/lua/include \
 		../../GamePlay/gameplay/src \
 		../../JsonCPP/include \
 		../../Ghoul/include \
+		../include
 
 LOCAL_STATIC_LIBRARIES := android_native_app_glue libgameplay libpng libzlib liblua libbullet libvorbis libOpenAL JsonCpp Ghoul
 include $(BUILD_SHARED_LIBRARY)
