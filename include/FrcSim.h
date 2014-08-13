@@ -17,7 +17,16 @@ class AerialAssist: public Game
 public:
 
     const static GFileName _kFieldBundle;
-    const static GFileName _kRobotBundle;
+    const static GFileName _kFieldTextureMap;
+
+    enum CameraPosition
+    {
+        DriverStation = 0,
+        Overhead,
+        Chase,
+        Side,
+        CameraCount
+    };
     
     /**
      * Constructor.
@@ -57,6 +66,17 @@ protected:
     void render(float elapsedTime);
     
     /**
+     * Draws the screen by visitin each node in the model.
+     */
+    void drawScreen(CameraPosition camera);
+    
+    /**
+     * Creates a camera and a hierarchy of nodes to allow easy rotation
+     * relative to the X, Y and Z axis.
+     */
+    Node* createCamera(const GString &cameraName, Camera** camera);
+    
+    /**
      *
      */
     void setMaterial(Node* node_ptr, const char* diffuse_string_ptr, const char* normal_string_ptr, float specularity);
@@ -67,18 +87,21 @@ protected:
     static void drawFrameRate(Font* font, const Vector4& color, unsigned int x, unsigned int y, unsigned int fps);
     
     // render variables & methods
-    Node* _camera_h_node;
-    Node* _camera_v_node;
     Node* _spotlight_node;
-    Node* _floor_node;
-    Node* _robot_node;
-    Node* _catapult_node;
-    Camera* _camera;
-    Node* _light_node;
-    Light* _light;
+    
+    Camera* _camera[CameraCount];
+    
     Light* _spotlight;
     
+    FrameBuffer* _offscreen_framebuffer;
+    
+    Robot *_robot;
+    
     double _elapsedTime;
+    
+    CameraPosition _active_camera;
+
+    CameraPosition _hud_camera;
 
 private:
 
@@ -98,12 +121,20 @@ private:
     /**
      *
      */
-    void createFloorModels(void);
+    Node* createFloorModel(void);
 
     /**
      *
      */
     Mesh* createFloorMesh(void);
+    
+    /**
+     * Determines the next camera position.
+     *
+     * @param current existing camera position
+     * @return next available camera position
+     */
+    CameraPosition getNextCamera(CameraPosition current) const;
     
     /**
      *
@@ -119,11 +150,21 @@ private:
     };
     
     vector<Node*> _renderQueues[QUEUE_COUNT];
+    
     Scene* _scene;
+    
     Font* _font;
+    
     bool _wireframe;
     
+    bool _view_frustrum_culling;
+    
     map<string, GPair<string, bool> > textureList;
+    
+    static const int kHudWidth;
+    
+    static const int kHudHeight;
+    
 };
 
 #endif
