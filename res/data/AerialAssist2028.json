@@ -1,0 +1,19 @@
+{
+    "bundle" : "res/models/AerialAssist2028Robot.gpb",
+    "textureMap" : "res/data/TextureMap2028.json",
+    "topNodeId" : "AerialAssistRobot",
+    "originOffsetX" : 0.0,
+    "originOffsetY" : 0.0,
+    "originOffsetZ" : 21.0,
+    "motionList" :
+    [
+        {
+            "name" : "Catapult",
+            "motion" : "angular",
+            "rotationAxis" : "x",
+            "minAngle" : 0,
+            "maxAngle" : 120,
+            "reset" : true
+        }
+    ]
+}
