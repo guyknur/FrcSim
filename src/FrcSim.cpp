@@ -19,54 +19,77 @@
 #include <ghoul/GMessage.H>
 #include <ghoul/GCallback.H>
 #include <ghoul/GException.H>
+#include <ghoul/GRegEx.H>
 
 using namespace std;
 
+#include <gameplay.h>
+
+using namespace gameplay;
+
+#include "json/IJsonSerializable.h"
+#include "Robot.h"
 #include "FrcSim.h"
 
 #ifdef ANDROID
 #include <android/log.h>
-#define fprintf(a, ...) ((void)__android_log_print(ANDROID_LOG_INFO, "AerialAssist", __VA_ARGS__))
+#define fprintf(a, ...) ((void)__android_log_print(ANDROID_LOG_INFO, "FrcSim", __VA_ARGS__))
 #endif // ANDROID
 
 // Declare our game instance
 AerialAssist game;
 
 const GFileName AerialAssist::_kFieldBundle = "res/models/AerialAssistField.gpb";
-const GFileName AerialAssist::_kRobotBundle = "res/models/AerialAssistRobot.gpb";
+const GFileName AerialAssist::_kFieldTextureMap = "/res/data/AerialAssistFieldTextureMap.json";
+const int AerialAssist::kHudWidth = 320;
+const int AerialAssist::kHudHeight = 200;
 
+//----------------------------------------------------------------------
+//
+// AerialAssist()
+//
+//----------------------------------------------------------------------
 AerialAssist::AerialAssist() :
-    _camera_h_node(NULL),
-    _camera_v_node(NULL),
     _spotlight_node(NULL),
-    _floor_node(NULL),
-    _robot_node(NULL),
-    _catapult_node(NULL),
-    _camera(NULL),
     _scene(NULL),
-    _light_node(NULL),
-    _light(NULL),
     _spotlight(NULL),
+    _offscreen_framebuffer(NULL),
+    _robot(NULL),
     _font(NULL),
     _elapsedTime(0.0),
-    _wireframe(false)
+    _active_camera(DriverStation),
+    _hud_camera(Overhead),
+    _wireframe(false),
+    _view_frustrum_culling(true)
 {
+    for (int i = 0; i < CameraCount; i++)
+    {
+        _camera[i] = NULL;
+    }
 }
 
+//----------------------------------------------------------------------
+//
+// initialize()
+//
+//----------------------------------------------------------------------
 void AerialAssist::initialize()
 {
+    // create offscreen framebuffer for use by HUD camera view
+    _offscreen_framebuffer = FrameBuffer::create("hud", getWidth(), getHeight());
     
 	// Create the font and scene
     _font = Font::create("res/ui/arial.gpb");
     
     GFileName resPath = FileSystem::getResourcePath();
-    GFileName textureMapFile = "res/data/TextureMap.json";
+    GFileName textureMapFile = _kFieldTextureMap;
     GFileName AerialAssistField = _kFieldBundle;
     GString fullPath = resPath + textureMapFile;
     
     // Copy files from "res" directory to Android SD card
     FileSystem::createFileFromAsset(textureMapFile);
     
+    textureList.clear();
     loadTextureMap((const char*)fullPath);
     
 #ifdef DEBUG
@@ -80,68 +103,56 @@ void AerialAssist::initialize()
     _scene = field_bundle_ptr->loadScene();
     
     // set ambient light color
-#ifdef DEBUG
-    fprintf(stderr, "[Debug] Setting ambient color\n");
-#endif // DEBUG
-    _scene->setAmbientColor(0.18f, 0.18f, 0.18f);
+    _scene->setAmbientColor(0.10f, 0.10f, 0.10f);
     
-    // load robot
-#ifdef DEBUG
-    fprintf(stderr, "[Debug] Loading robot model from GPB \"%s\"\n", (const char*)_kRobotBundle);
-#endif // DEBUG
-    Bundle *robot_bundle_ptr = Bundle::create(_kRobotBundle);
-    Node* robot = robot_bundle_ptr->loadNode("AerialAssistRobot")->clone();
-    if (robot)
+    _robot = new Robot("/res/data/AerialAssist2028.json");
+    Node *robot_node = _robot->getNode();
+    if (robot_node)
     {
-        _catapult_node = robot->findNode("Catapult");
-        _robot_node = Node::create("Robot");
-        _robot_node->addChild(robot);
-        robot->setTranslation(0, 0, 21);
-        _scene->addNode(_robot_node);
-        _robot_node->setTranslation(Vector3(0, 0, 0));
-#ifdef DEBUG
-        fprintf(stderr, "[Debug] Loaded model (%f, %f, %f)\n", _robot_node->getTranslationX(), _robot_node->getTranslationY(), _robot_node->getTranslationZ());
-#endif // DEBUG
-        _scene->addNode(_robot_node);
+        GFileName textureMap = resPath + _robot->getTextureMapFile();
+        loadTextureMap((const char*)textureMap);
+        _scene->addNode(robot_node);
+        
+        // $$$ FIX ME - Set robot to midcourt for now
+        robot_node->setTranslation(Vector3(0, 0, 0));
+        robot_node->setRotation(Vector3(1.0, 1.0, 1.0), 0.0);
+        
+        Node* chase_node = createCamera("Chase", &_camera[Chase]);
+        robot_node->addChild(chase_node);
+        chase_node->setTranslation(0.0, 108.0, 36.0);
+        
+        Node* side_node = createCamera("Side", &_camera[Side]);
+        robot_node->addChild(side_node);
+        side_node->setTranslation(-84.0, 0.0, 24.0);
+        Node *hor = side_node->findNode("camera_h");
+        if (hor)
+        {
+            hor->setRotation(Vector3(0.0f, 0.0f, 1.0f), MATH_DEG_TO_RAD(-90));
+        }
     }
     
-    SAFE_RELEASE(field_bundle_ptr);
-    SAFE_RELEASE(robot_bundle_ptr);
-
-    // Get the box model and initialize its material parameter values and bindings
-//    Node* boxNode = _scene->findNode("box");
-//    Model* boxModel = boxNode->getModel();
-//    Material* boxMaterial = boxModel->getMaterial();
-    
 #ifdef DEBUG
-    fprintf(stderr, "[Debug] Creating camera\n");
+    fprintf(stderr, "[Debug] Creating cameras\n");
 #endif // DEBUG
+    Node* camera = createCamera("Driver", &_camera[DriverStation]);
+    camera->setTranslation(0.0, 384.0, 58.0);
+    _scene->addNode(camera);
     
-    // create camera
-    _camera_h_node = Node::create("camera_h");
-    _scene->addNode(_camera_h_node);
-    _camera_v_node = Node::create("camera_v");
-    _camera_h_node->addChild(_camera_v_node);
-    _camera = Camera::createPerspective(50.0f, getAspectRatio(), 0.01f, 1000.0f);
-    _camera_v_node->setCamera(_camera);
-    _scene->setActiveCamera(_camera);
-    
-    _camera_h_node->setRotation(Vector3(0.0f, 1.0f, 0.0f), MATH_DEG_TO_RAD(180));
-    _camera_h_node->setTranslation(0.0, 384.0, 58.0);
-    _camera_v_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
+    Node* overhead = createCamera("Overhead", &_camera[Overhead]);
+    overhead->setTranslation(0.0, 0.0, 180.0);
+    _scene->addNode(overhead);
+    Node *vert = overhead->findNode("camera_v");
+    if (vert)
+    {
+        vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(180));
+    }
     
 #ifdef DEBUG
     fprintf(stderr, "[Debug] Creating light\n");
 #endif // DEBUG
     
-    // create light
-    _light_node = Node::create("light");
-    _camera_v_node->addChild(_light_node);
-    _light = Light::createPoint(Vector3(1.0f, 1.0f, 1.0f), 1500.0f);
-    _light_node->setCamera(_camera);
-    
 	// Create a spotlight and create a reference icon for the light
-	_spotlight = Light::createSpot(Vector3::one(), 25000.0f, MATH_DEG_TO_RAD(0.01), MATH_DEG_TO_RAD(45.0));
+	_spotlight = Light::createSpot(Vector3::one(), 2500.0f, MATH_DEG_TO_RAD(0.001), MATH_DEG_TO_RAD(40.0));
 	_spotlight_node = Node::create("spotLight");
 	_spotlight_node->setLight(_spotlight);
     _spotlight_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(0));
@@ -151,18 +162,37 @@ void AerialAssist::initialize()
 #ifdef DEBUG
     fprintf(stderr, "[Debug] Walking all scene nodes to set material\n");
 #endif // DEBUG
-    
     // Visit all the nodes in the scene to set the material
     _scene->visit(this, &AerialAssist::setSceneMaterial);
     
-#ifdef DEBUG
-    fprintf(stderr, "[Debug] Creating floor model\n");
-#endif // DEBUG
-    
     // Add a floor to the scene
-//    createFloorModels();
+    createFloorModel();
 }
 
+//----------------------------------------------------------------------
+//
+// createCamera()
+//
+//----------------------------------------------------------------------
+Node* AerialAssist::createCamera(const GString &cameraName, Camera** camera)
+{
+    Node *camera_node = Node::create((const char*)cameraName);
+    Node *camera_h_node = Node::create("camera_h");
+    camera_node->addChild(camera_h_node);
+    camera_node->setRotation(Vector3(0.0f, 1.0f, 0.0f), MATH_DEG_TO_RAD(180));
+    Node *camera_v_node = Node::create("camera_v");
+    camera_h_node->addChild(camera_v_node);
+    *camera = Camera::createPerspective(50.0f, getAspectRatio(), 0.01f, 2000.0f);
+    camera_v_node->setCamera(*camera);
+    camera_v_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
+    return camera_node;
+}
+
+//----------------------------------------------------------------------
+//
+// setMaterial()
+//
+//----------------------------------------------------------------------
 void AerialAssist::setMaterial(Node* node_ptr, const char* diffuse_string_ptr, const char* normal_string_ptr, float specularity)
 {
     if (node_ptr->getModel() == NULL)
@@ -170,7 +200,7 @@ void AerialAssist::setMaterial(Node* node_ptr, const char* diffuse_string_ptr, c
         return;
     }
 #ifdef DEBUG
-    fprintf(stderr, "[Debug]\tAssigning material for node \"%s\" to \"%s\"\n", node_ptr->getId(), diffuse_string_ptr);
+//    fprintf(stderr, "[Debug]\t\tAssigning material for node \"%s\" to \"%s\"\n", node_ptr->getId(), diffuse_string_ptr);
 #endif // DEBUG
     // create material
     bool material_set = false;
@@ -226,11 +256,6 @@ void AerialAssist::setMaterial(Node* node_ptr, const char* diffuse_string_ptr, c
     material_ptr->getStateBlock()->setDepthWrite(true);
     material_ptr->getParameter("u_ambientColor")->bindValue(_scene, &Scene::getAmbientColor);
 
-    // bind point light to material
-//    material_ptr->getParameter("u_pointLightPosition[0]")->bindValue(_camera_h_node, &Node::getTranslationView);
-//    material_ptr->getParameter("u_pointLightRangeInverse[0]")->bindValue(_light, &Light::getRangeInverse);
-//    material_ptr->getParameter("u_pointLightColor[0]")->bindValue(_light, &Light::getColor);
-
     // bind spotlight to material
     material_ptr->getParameter("u_spotLightPosition[0]")->bindValue(_spotlight_node, &Node::getTranslationView);
     material_ptr->getParameter("u_spotLightRangeInverse[0]")->bindValue(_spotlight, &Light::getRangeInverse);
@@ -255,52 +280,66 @@ void AerialAssist::setMaterial(Node* node_ptr, const char* diffuse_string_ptr, c
     }
 }
 
+//----------------------------------------------------------------------
+//
+// finalize()
+//
+//----------------------------------------------------------------------
 void AerialAssist::finalize()
 {
-    SAFE_RELEASE(_robot_node);
+    SAFE_RELEASE(_offscreen_framebuffer);
     SAFE_RELEASE(_spotlight);
     SAFE_RELEASE(_spotlight_node);
     SAFE_RELEASE(_scene);
 }
 
-void AerialAssist::createFloorModels(void)
+//----------------------------------------------------------------------
+//
+// createFloorModels()
+//
+//----------------------------------------------------------------------
+Node* AerialAssist::createFloorModel(void)
 {
     float size = 1.0f;
     Mesh* tile_mesh_ptr = createFloorMesh();
     
     // create node
-    _floor_node = Node::create("floor");
-    _scene->addNode(_floor_node);
-    _floor_node->release();
+    Node* floor = Node::create("floor");
+    _scene->addNode(floor);
     
     Model* tile_model_ptr = Model::create(tile_mesh_ptr);
-    _floor_node->setModel(tile_model_ptr);
-    SAFE_RELEASE(tile_model_ptr);
+    floor->setModel(tile_model_ptr);
     
     // create material
-    setMaterial(_floor_node, "res/textures/tile_floor.png", "", 50.0f);
-    Material* material_ptr = _floor_node->getModel()->getMaterial();
+    setMaterial(floor, "res/textures/brown.png", NULL, 0.0f);
     
     // set position (converting ornament 2D space into model 3D space)
-    float tile_x = 0;                // (3D) x =  x (2D)
-    float tile_y = 0;                // (3D) y =  0 (2D)
-    float tile_z = 0;                // (3D) z = -y (2D)
-    _floor_node->setTranslation(Vector3(tile_x, tile_y, tile_z));
-
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    floor->setTranslation(Vector3(x, y, z));
+//    floor->release();
+    SAFE_RELEASE(tile_model_ptr);
     SAFE_RELEASE(tile_mesh_ptr);
+    return floor;
 }
 
+//----------------------------------------------------------------------
+//
+// createFloorMesh()
+//
+//----------------------------------------------------------------------
 Mesh* AerialAssist::createFloorMesh(void)
 {
     float vertices[] =
     {
         // bottom (-z)
-        -500, -500, -0.01,   0,  1,  0,    0, 1,
-        500,  -500, -0.01,   0,  1,  0,    1, 1,
-        -500,  500, -0.01,   0,  1,  0,    0, 0,
-        -500,  500, -0.01,   0,  1,  0,    0, 0,
-        500,  -500, -0.01,   0,  1,  0,    1, 1,
-        500,   500, -0.01,   0,  1,  0,    1, 0
+        -500, -500, 0.0,   0, 0, 1,   0, 0,
+         500, -500, 0.0,   0, 0, 1,   1, 0,
+        -500,  500, 0.0,   0, 0, 1,   0, 1,
+        -500,  500, 0.0,   0, 0, 1,   0, 1,
+         500, -500, 0.0,   0, 0, 1,   1, 0,
+         500,  500, 0.0,   0, 0, 1,   1, 1
     };
     unsigned int vertexCount = 6;
     unsigned int indexCount = 6;
@@ -318,11 +357,16 @@ Mesh* AerialAssist::createFloorMesh(void)
     }
     mesh->setPrimitiveType(Mesh::TRIANGLES);
     mesh->setVertexData(vertices, 0, vertexCount);
-    BoundingSphere boundingSphere(Vector3(0.0f, 0.0f, 0.0f), 1.0f);
+    BoundingSphere boundingSphere(Vector3(0.0f, 0.0f, 0.0f), 1414.21356f);
     mesh->setBoundingSphere(boundingSphere);
     return mesh;
 }
 
+//----------------------------------------------------------------------
+//
+// loadTextureMap()
+//
+//----------------------------------------------------------------------
 void AerialAssist::loadTextureMap(const string &filename)
 {
     std::string jsonInput;
@@ -356,7 +400,7 @@ void AerialAssist::loadTextureMap(const string &filename)
                 string texture = node.get("texture", "").asCString();
                 bool transparent = node.get("transparent", false).asBool();
 #ifdef DEBUG
-//                fprintf(stderr, "[Debug]\t\tReading texture \"%s\" for node \"%s\" (alpha %s)\n", texture.c_str(), id.c_str(), transparent?"true":"false");
+                fprintf(stderr, "[Debug]\t\tReading texture \"%s\" for node \"%s\" (alpha %s)\n", texture.c_str(), id.c_str(), transparent?"true":"false");
 #endif // DEBUG
                 GPair<string, bool> pair(texture, transparent);
                 textureList.insert(make_pair(id, pair));
@@ -371,53 +415,117 @@ void AerialAssist::loadTextureMap(const string &filename)
 #endif // DEBUG
 }
 
+//----------------------------------------------------------------------
+//
+// update()
+//
+//----------------------------------------------------------------------
 void AerialAssist::update(float elapsedTime)
 {
     _elapsedTime += elapsedTime;
 #ifdef DEBUG
 //    fprintf(stderr, "[Trace] elapsedTime=%f\n", _elapsedTime / 1000.0);
 #endif // DEBUG
-    _robot_node->setRotation(Vector3(0.0f, 0.0f, 1.0f), sin(_elapsedTime / 1000.0) * 2);
-    if (_catapult_node)
+    Node* robot_node = NULL;
+    if (_robot)
     {
-        _catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
+        robot_node = _robot->getNode();
     }
-//    _spotlight_node->setTranslationZ(400.0 + sin(_elapsedTime / 1000.0) * 250);
-//    _camera_h_node->rotateX(MATH_DEG_TO_RAD((float)elapsedTime / 10000.0f * 180.0f));
-//    _camera_h_node->rotateY(MATH_DEG_TO_RAD((float)elapsedTime / 27500.0f * 180.0f));
+    Node* cam_node = _scene->findNode("Overhead");
+    if (cam_node && robot_node)
+    {
+        float robot_pos_x = robot_node->getTranslationX();
+        float robot_pos_y = robot_node->getTranslationY();
+        cam_node->setTranslationX(robot_pos_x);
+        cam_node->setTranslationY(robot_pos_y);
+    }
+    
+    if (robot_node)
+    {
+        robot_node->setTranslationY(sin(_elapsedTime / 1500.0) * 150);
+        Node* catapult_node = robot_node->findNode("Catapult");
+        if (catapult_node)
+        {
+            catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
+        }
+    }
 }
 
+//----------------------------------------------------------------------
+//
+// render()
+//
+//----------------------------------------------------------------------
 void AerialAssist::render(float elapsedTime)
 {
-    // Clear the color and depth buffers
-    clear(CLEAR_COLOR_DEPTH, Vector4::zero(), 1.0f, 0);
-
     
-    // Visit all the nodes in the scene to build our render queues
-    for (unsigned int i = 0; i < QUEUE_COUNT; ++i)
+    drawScreen(_active_camera);
+    
+    // Render HUD into offscreen framebuffer
+    Image* hud_image = NULL;
+    if (_offscreen_framebuffer)
     {
-        _renderQueues[i].clear();
+        FrameBuffer* old_framebuffer = _offscreen_framebuffer->bind();
+        drawScreen(_hud_camera);
+        hud_image = _offscreen_framebuffer->createScreenshot();
+        old_framebuffer->bind();
     }
-    _scene->visit(this, &AerialAssist::buildRenderQueues);
     
-    // Iterate through each render queue and draw the nodes in them
-    for (unsigned int i = 0; i < QUEUE_COUNT; ++i)
+    if (hud_image)
     {
-        std::vector<Node*>& queue = _renderQueues[i];
-        
-#ifdef DEBUG
-//        fprintf(stderr, "[Debug] Rendering %s queue with %lu nodes\n", i==0?"opaque":"transparent", queue.size());
-#endif // DEBUG
-        for (size_t j = 0, ncount = queue.size(); j < ncount; ++j)
-        {
-            queue[j]->getModel()->draw(_wireframe);
-        }
+        Texture *hud_texture = Texture::create(hud_image);
+        SpriteBatch *hud_sb = SpriteBatch::create(hud_texture);
+        hud_sb->start();
+        hud_sb->draw(Rectangle(getWidth() - kHudWidth - 10, 10, kHudWidth, kHudHeight), Rectangle(0, 0, hud_image->getWidth(), hud_image->getHeight()));
+        hud_sb->finish();
+        SAFE_DELETE(hud_sb);
+        SAFE_RELEASE(hud_texture);
+        SAFE_RELEASE(hud_image);
     }
     
     // draw the frame rate
     drawFrameRate(_font, Vector4::one(), 5, 1, getFrameRate());
 }
 
+//----------------------------------------------------------------------
+//
+// drawScreen()
+//
+//----------------------------------------------------------------------
+void AerialAssist::drawScreen(CameraPosition camera)
+{
+    _scene->setActiveCamera(_camera[camera]);
+
+    // Clear the color and depth buffers
+    clear(CLEAR_COLOR_DEPTH, Vector4(0.0, 0.0, 0.0, 1.0), 1.0f, 0);
+    
+    // Visit all the nodes in the scene to build our render queues, we have to
+    // do this for every camera so buildRenderQueues() can do frustrum culling
+    for (unsigned int i = 0; i < QUEUE_COUNT; ++i)
+    {
+        _renderQueues[i].clear();
+    }
+    _scene->visit(this, &AerialAssist::buildRenderQueues);
+    
+    // Iterate through each render queue and draw its nodes
+    for (unsigned int i = 0; i < QUEUE_COUNT; ++i)
+    {
+        std::vector<Node*>& queue = _renderQueues[i];
+#ifdef DEBUG
+//        fprintf(stderr, "[Debug] Rendering %s queue with %lu nodes for camera %s\n", i==0?"opaque":"transparent", queue.size(), (camera==Overhead?"overhead":(camera==Chase?"chase":"driver")));
+#endif // DEBUG
+        for (size_t j = 0, ncount = queue.size(); j < ncount; ++j)
+        {
+            queue[j]->getModel()->draw(_wireframe);
+        }
+    }
+}
+
+//----------------------------------------------------------------------
+//
+// drawFrameRate()
+//
+//----------------------------------------------------------------------
 void AerialAssist::drawFrameRate(Font* font, const Vector4& color, unsigned int x, unsigned int y, unsigned int fps)
 {
     char buffer[10];
@@ -427,30 +535,40 @@ void AerialAssist::drawFrameRate(Font* font, const Vector4& color, unsigned int 
     font->finish();
 }
 
+//----------------------------------------------------------------------
+//
+// buildRenderQueues()
+//
+//----------------------------------------------------------------------
 bool AerialAssist::buildRenderQueues(Node* node)
 {
     Model* model = node->getModel();
     if (model)
     {
         // Perform view-frustum culling for this node
-//        if (__viewFrustumCulling && !node->getBoundingSphere().intersects(_scene->getActiveCamera()->getFrustum()))
-//        return true;
-        
-        // Determine which render queue to insert the node into
-        std::vector<Node*>* queue;
-        if (node->hasTag("transparent"))
+        if (_view_frustrum_culling && node->getBoundingSphere().intersects(_scene->getActiveCamera()->getFrustum()))
         {
-            queue = &_renderQueues[QUEUE_TRANSPARENT];
+            // Determine which render queue to insert the node into
+            std::vector<Node*>* queue;
+            if (node->hasTag("transparent"))
+            {
+                queue = &_renderQueues[QUEUE_TRANSPARENT];
+            }
+            else
+            {
+                queue = &_renderQueues[QUEUE_OPAQUE];
+            }
+            queue->push_back(node);
         }
-        else
-        {
-            queue = &_renderQueues[QUEUE_OPAQUE];
-        }
-        queue->push_back(node);
     }
     return true;
 }
 
+//----------------------------------------------------------------------
+//
+// setSceneMaterial()
+//
+//----------------------------------------------------------------------
 bool AerialAssist::setSceneMaterial(Node* node)
 {
     // If the node visited contains a model, draw it
@@ -460,14 +578,22 @@ bool AerialAssist::setSceneMaterial(Node* node)
         string id = node->getId();
         string texture = "res/textures/gray.png";
         bool transparent = false;
-        map<string, GPair<string, bool> >::const_iterator it = textureList.find(id);
-        if (it != textureList.end())
+        map<string, GPair<string, bool> >::const_iterator it;
+        for (it = textureList.begin(); it != textureList.end(); it++)
         {
-            texture = it->second.first;
-            transparent = it->second.second;
+            GString regex = it->first.c_str();
+            if (RegExp(id.c_str(), regex))
+            {
+                texture = it->second.first;
+                transparent = it->second.second;
+#ifdef DEBUG
+                fprintf(stderr, "[Debug]\t\tRegEx match for \"%s\" on \"%s\"\n", (const char*)regex, id.c_str());
+#endif // DEBUG
+                break;
+            }
         }
 #ifdef DEBUG
-//        fprintf(stderr, "[Debug]\t\tSetting %smaterial for node \"%s\" to \"%s\"\n", (transparent?"transparent ":""), id.c_str(), texture.c_str());
+        fprintf(stderr, "[Debug]\tSetting %smaterial for node \"%s\" to \"%s\"\n", (transparent?"transparent ":""), id.c_str(), texture.c_str());
 #endif // DEBUG
         if (transparent)
         {
@@ -481,6 +607,11 @@ bool AerialAssist::setSceneMaterial(Node* node)
     return true;
 }
 
+//----------------------------------------------------------------------
+//
+// keyEvent()
+//
+//----------------------------------------------------------------------
 void AerialAssist::keyEvent(Keyboard::KeyEvent evt, int key)
 {
     if (evt == Keyboard::KEY_PRESS)
@@ -494,12 +625,37 @@ void AerialAssist::keyEvent(Keyboard::KeyEvent evt, int key)
     }
 }
 
+//----------------------------------------------------------------------
+//
+// getNextCamera()
+//
+//----------------------------------------------------------------------
+AerialAssist::CameraPosition AerialAssist::getNextCamera(AerialAssist::CameraPosition current) const
+{
+    int cam = (int)current;
+    do
+    {
+        if (++cam == (int)CameraCount)
+        {
+            cam = (int)DriverStation;
+        }
+    }
+    while (_camera[current] == NULL);
+    return (CameraPosition)cam;
+}
+
+//----------------------------------------------------------------------
+//
+// touchEvent()
+//
+//----------------------------------------------------------------------
 void AerialAssist::touchEvent(Touch::TouchEvent evt, int x, int y, unsigned int contactIndex)
 {
     switch (evt)
     {
     case Touch::TOUCH_PRESS:
-        _wireframe = !_wireframe;
+        _hud_camera = getNextCamera(_hud_camera);
+        _active_camera = getNextCamera(_active_camera);
         break;
     case Touch::TOUCH_RELEASE:
         break;

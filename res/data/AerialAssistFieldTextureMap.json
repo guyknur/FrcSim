@@ -6,27 +6,11 @@
             "texture" : "res/textures/white.png"
         },
         {
-            "node" : "AerialAssistField:GE_14063_1",
+            "node" : "AerialAssistField:GE_14063_[1-2]",
             "texture" : "res/textures/white.png"
         },
         {
-            "node" : "AerialAssistField:GE_14063_2",
-            "texture" : "res/textures/white.png"
-        },
-        {
-            "node" : "AerialAssistField:FE_00037_07_1",
-            "texture" : "res/textures/white.png"
-        },
-        {
-            "node" : "AerialAssistField:FE_00037_07_2",
-            "texture" : "res/textures/white.png"
-        },
-        {
-            "node" : "AerialAssistField:FE_00037_07_3",
-            "texture" : "res/textures/white.png"
-        },
-        {
-            "node" : "AerialAssistField:FE_00037_07_4",
+            "node" : "AerialAssistField:FE_00037_07_[0-9]",
             "texture" : "res/textures/white.png"
         },
         {
@@ -46,11 +30,7 @@
             "texture" : "res/textures/red.png"
         },
         {
-            "node" : "AerialAssistField:GE_14015_3",
-            "texture" : "res/textures/red.png"
-        },
-        {
-            "node" : "AerialAssistField:GE_14015_4",
+            "node" : "AerialAssistField:GE_14015_[3-4]",
             "texture" : "res/textures/red.png"
         },
         {
@@ -70,161 +50,31 @@
             "texture" : "res/textures/blue.png"
         },
         {
-            "node" : "AerialAssistField:GE_14015_1",
+            "node" : "AerialAssistField:GE_14015_[1-2]",
             "texture" : "res/textures/blue.png"
         },
         {
-            "node" : "AerialAssistField:GE_14015_2",
-            "texture" : "res/textures/blue.png"
-        },
-        {
-            "node" : "AerialAssistField:GE_14037_1",
+            "node" : "AerialAssistField:GE_14037_[1-4]",
             "texture" : "res/textures/clear.png",
             "transparent" : true
         },
         {
-            "node" : "AerialAssistField:GE_14037_2",
+            "node" : "AerialAssistField:FE_00012__[0-6]",
             "texture" : "res/textures/clear.png",
             "transparent" : true
         },
         {
-            "node" : "AerialAssistField:GE_14037_3",
+            "node" : "AerialAssistField:FE_00009__[1-8]",
             "texture" : "res/textures/clear.png",
             "transparent" : true
         },
         {
-            "node" : "AerialAssistField:GE_14037_4",
+            "node" : "AerialAssistField:FE_00010__[1-8]",
             "texture" : "res/textures/clear.png",
             "transparent" : true
         },
         {
-            "node" : "AerialAssistField:FE_00012__1",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00012__2",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00012__3",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00012__4",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-     
-        },
-        {
-            "node" : "AerialAssistField:FE_00012__5",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00012__6",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__1",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__2",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__3",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__4",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__5",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__6",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__7",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00009__8",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__1",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__2",
-        "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__3",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__4",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__5",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__6",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__7",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00010__8",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00011__1",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00011__2",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00011__3",
-            "texture" : "res/textures/clear.png",
-            "transparent" : true
-        },
-        {
-            "node" : "AerialAssistField:FE_00011__4",
+            "node" : "AerialAssistField:FE_00011__[1-4]",
             "texture" : "res/textures/clear.png",
             "transparent" : true
         }
