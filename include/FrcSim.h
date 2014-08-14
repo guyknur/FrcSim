@@ -155,6 +155,8 @@ private:
     
     Font* _font;
     
+    SpriteBatch* _blank;
+    
     bool _wireframe;
     
     bool _view_frustrum_culling;

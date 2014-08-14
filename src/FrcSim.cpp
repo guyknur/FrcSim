@@ -56,6 +56,7 @@ AerialAssist::AerialAssist() :
     _offscreen_framebuffer(NULL),
     _robot(NULL),
     _font(NULL),
+    _blank(NULL),
     _elapsedTime(0.0),
     _active_camera(DriverStation),
     _hud_camera(Overhead),
@@ -77,6 +78,11 @@ void AerialAssist::initialize()
 {
     // create offscreen framebuffer for use by HUD camera view
     _offscreen_framebuffer = FrameBuffer::create("hud", getWidth(), getHeight());
+#ifdef DEBUG
+    fprintf(stderr, "[Debug] Created offscreen framebuffer with RenderTarget of %s\n", (_offscreen_framebuffer->getRenderTargetCount()?_offscreen_framebuffer->getRenderTarget()->getId():"NULL"));
+#endif // DEBUG
+    
+    _blank = SpriteBatch::create("res/textures/black.png");
     
 	// Create the font and scene
     _font = Font::create("res/ui/arial.gpb");
@@ -103,7 +109,7 @@ void AerialAssist::initialize()
     _scene = field_bundle_ptr->loadScene();
     
     // set ambient light color
-    _scene->setAmbientColor(0.10f, 0.10f, 0.10f);
+    _scene->setAmbientColor(0.25f, 0.25f, 0.25f);
     
     _robot = new Robot("/res/data/AerialAssist2028.json");
     Node *robot_node = _robot->getNode();
@@ -182,7 +188,7 @@ Node* AerialAssist::createCamera(const GString &cameraName, Camera** camera)
     camera_node->setRotation(Vector3(0.0f, 1.0f, 0.0f), MATH_DEG_TO_RAD(180));
     Node *camera_v_node = Node::create("camera_v");
     camera_h_node->addChild(camera_v_node);
-    *camera = Camera::createPerspective(50.0f, getAspectRatio(), 0.01f, 2000.0f);
+    *camera = Camera::createPerspective(50.0f, getAspectRatio(), 1.0f, 2000.0f);
     camera_v_node->setCamera(*camera);
     camera_v_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
     return camera_node;
@@ -431,6 +437,17 @@ void AerialAssist::update(float elapsedTime)
     {
         robot_node = _robot->getNode();
     }
+    
+    if (robot_node)
+    {
+//        robot_node->setTranslationY(sin(_elapsedTime / 1500.0) * 150);
+        Node* catapult_node = robot_node->findNode("Catapult");
+        if (catapult_node)
+        {
+            catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
+        }
+    }
+    
     Node* cam_node = _scene->findNode("Overhead");
     if (cam_node && robot_node)
     {
@@ -438,16 +455,6 @@ void AerialAssist::update(float elapsedTime)
         float robot_pos_y = robot_node->getTranslationY();
         cam_node->setTranslationX(robot_pos_x);
         cam_node->setTranslationY(robot_pos_y);
-    }
-    
-    if (robot_node)
-    {
-        robot_node->setTranslationY(sin(_elapsedTime / 1500.0) * 150);
-        Node* catapult_node = robot_node->findNode("Catapult");
-        if (catapult_node)
-        {
-            catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
-        }
     }
 }
 
@@ -459,29 +466,19 @@ void AerialAssist::update(float elapsedTime)
 void AerialAssist::render(float elapsedTime)
 {
     
+    // Clear the color and depth buffers
+    clear(CLEAR_COLOR_DEPTH, Vector4(0.0, 0.0, 0.0, 1.0), 1.0f, 0);
+    
+    Rectangle default_viewport = getViewport();
     drawScreen(_active_camera);
     
-    // Render HUD into offscreen framebuffer
-    Image* hud_image = NULL;
-    if (_offscreen_framebuffer)
-    {
-        FrameBuffer* old_framebuffer = _offscreen_framebuffer->bind();
-        drawScreen(_hud_camera);
-        hud_image = _offscreen_framebuffer->createScreenshot();
-        old_framebuffer->bind();
-    }
-    
-    if (hud_image)
-    {
-        Texture *hud_texture = Texture::create(hud_image);
-        SpriteBatch *hud_sb = SpriteBatch::create(hud_texture);
-        hud_sb->start();
-        hud_sb->draw(Rectangle(getWidth() - kHudWidth - 10, 10, kHudWidth, kHudHeight), Rectangle(0, 0, hud_image->getWidth(), hud_image->getHeight()));
-        hud_sb->finish();
-        SAFE_DELETE(hud_sb);
-        SAFE_RELEASE(hud_texture);
-        SAFE_RELEASE(hud_image);
-    }
+//    _blank->start();
+//    _blank->draw(Rectangle(getWidth() - kHudWidth - 12, 8, kHudWidth + 4, kHudHeight + 4), Rectangle(0, 0, 1, 1), Vector4::one());
+//    _blank->finish();
+    Rectangle hud(getWidth() - kHudWidth - 10, getHeight() - 10 - kHudHeight, kHudWidth, kHudHeight);
+    setViewport(hud);
+    drawScreen(_hud_camera);
+    setViewport(default_viewport);
     
     // draw the frame rate
     drawFrameRate(_font, Vector4::one(), 5, 1, getFrameRate());
@@ -495,9 +492,6 @@ void AerialAssist::render(float elapsedTime)
 void AerialAssist::drawScreen(CameraPosition camera)
 {
     _scene->setActiveCamera(_camera[camera]);
-
-    // Clear the color and depth buffers
-    clear(CLEAR_COLOR_DEPTH, Vector4(0.0, 0.0, 0.0, 1.0), 1.0f, 0);
     
     // Visit all the nodes in the scene to build our render queues, we have to
     // do this for every camera so buildRenderQueues() can do frustrum culling
