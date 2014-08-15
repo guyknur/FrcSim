@@ -55,6 +55,72 @@ public:
     void LoadConfig(const GFileName &filename);
     
     /**
+     * Update the robot's node position and rotation in the scene.
+     *
+     * Moves the robot based on its current facing, velocity, acceleration
+     * and position of the wheels.
+     *
+     * @param elapsedTime elapsed time since the last frame in seconds
+     */
+    virtual void update(float elapsedTime) throw(GNullPointerException);
+    
+    /**
+     * Change the robot's velocity setpoint.
+     *
+     * @param velocityPercent new velocity setpoint value (in percent of maximum)
+     */
+    void setVelocity(float velocityPercent);
+    
+    /**
+     * Change the robot's roll.
+     *
+     * @param roll new roll value
+     */
+    void setRoll(float roll);
+    
+    /**
+     * Change the robot's pitch.
+     *
+     * @param pitch new pitch value
+     */
+    void setPitch(float pitch);
+    
+    /**
+     * Change the robot's yaw.
+     *
+     * @param yaw new yaw value
+     */
+    void setYaw(float yaw);
+    
+    /**
+     * Get a copy of the robot's roll.
+     *
+     * @return current roll value
+     */
+    float getRoll() const { return _rotation.y; }
+
+    /**
+     * Get a copy of the robot's pitch.
+     *
+     * @return current pitch value
+     */
+    float getPitch() const { return _rotation.x; }
+    
+    /**
+     * Get a copy of the robot's yaw.
+     *
+     * @return current yaw value
+     */
+    float getYaw() const { return _rotation.z; }
+    
+    /**
+     * Gets a copy of the robot's translation coordinates.
+     *
+     * @return copy of the robot's position (x, y and z).
+     */
+    Vector3 getPosition() const { return _position; }
+    
+    /**
      * Method to write Robot configuration to JSON file.
      *
      * @param root JsonCPP root node to write to
@@ -85,19 +151,28 @@ protected:
     
     Node* _robot_node;             /**< Pointer to GamePlay's Node instance for the
                                          top level object, used for robot translation
-                                         and rotation */
-    GString _top_node_id;
+                                         and rotation                                 */
     
-    double _origin_offset_x;
+    GString _top_node_id;          /**< Name of top-level node ID in bundle           */
     
-    double _origin_offset_y;
+    Vector3 _origin_offset;        /**< Offset (in inches) of robot's center on floor */
     
-    double _origin_offset_z;
+    Vector3 _position;             /**< Position of robot on field (in inches)        */
+    
+    Vector3 _rotation;             /**< Rotation angle (pitch=x, roll=y, yaw=z) in
+                                        degrees                                       */
     
     GFileName _bundle_file;        /**< Name of GamePlay's bundle file                */
     
     GFileName _texture_map_file;   /**< Name of JSON file specifying robot's textures */
     
+    double _velocity;              /**< Current velocity of robot in inches/sec       */
+    
+    double _velocity_setpoint;     /**< Desired velocity of the robot in inches/sec   */
+    
+    double _max_acceleration;      /**< Maximum acceleration in delta inches/sec      */
+    
+    double _max_velocity;          /**< Maximum velocity in inches/sec                */
     
 };
 

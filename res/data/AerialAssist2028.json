@@ -5,6 +5,8 @@
     "originOffsetX" : 0.0,
     "originOffsetY" : 0.0,
     "originOffsetZ" : 21.0,
+    "maxAcceleration" : 5.0,
+    "maxVelocity" : 20.0,
     "motionList" :
     [
         {

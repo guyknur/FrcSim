@@ -49,9 +49,10 @@ using namespace gameplay;
 //----------------------------------------------------------------------
 Robot::Robot() :
     _robot_node(NULL),
-    _origin_offset_x(0.0),
-    _origin_offset_y(0.0),
-    _origin_offset_z(0.0)
+    _velocity(0.0),
+    _velocity_setpoint(0.0),
+    _max_acceleration(0.0),
+    _max_velocity(0.0)
 {
 }
 
@@ -62,9 +63,13 @@ Robot::Robot() :
 //----------------------------------------------------------------------
 Robot::Robot(const Robot &robot) :
     _robot_node(NULL),
-    _origin_offset_x(robot._origin_offset_x),
-    _origin_offset_y(robot._origin_offset_y),
-    _origin_offset_z(robot._origin_offset_z)
+    _origin_offset(robot._origin_offset),
+    _position(robot._position),
+    _rotation(robot._rotation),
+    _velocity(robot._velocity),
+    _velocity_setpoint(robot._velocity_setpoint),
+    _max_acceleration(robot._max_acceleration),
+    _max_velocity(robot._max_velocity)
 {
     if (robot._robot_node)
     {
@@ -79,9 +84,10 @@ Robot::Robot(const Robot &robot) :
 //----------------------------------------------------------------------
 Robot::Robot(const GFileName &configFile) :
     _robot_node(NULL),
-    _origin_offset_x(0.0),
-    _origin_offset_y(0.0),
-    _origin_offset_z(0.0)
+    _velocity(0.0),
+    _velocity_setpoint(0.0),
+    _max_acceleration(0.0),
+    _max_velocity(0.0)
 {
     LoadConfig(configFile);
 }
@@ -120,6 +126,91 @@ void Robot::LoadConfig(const GFileName &filename)
 
 //----------------------------------------------------------------------
 //
+// update()
+//
+//----------------------------------------------------------------------
+void Robot::update(float elapsedTime) throw(GNullPointerException)
+{
+    if (!_robot_node)
+    {
+        throw GNullPointerException("Robot node not found.");
+    }
+    float accel = abs(_velocity_setpoint) - abs(_velocity);
+    float dir = 1.0;
+    if ((_velocity_setpoint - _velocity) < 0)
+    {
+        dir = -1.0;
+    }
+    if (abs(accel) > _max_acceleration)
+    {
+        accel = abs(_max_acceleration);
+    }
+    else
+    {
+        accel = abs(accel);
+    }
+    _velocity = _velocity + (dir * accel * elapsedTime);
+#ifdef DEBUG
+    fprintf(stderr, "[Debug] %6.4f: Velocity changed by %6.4f and is now %6.4f\n", elapsedTime, (dir * accel * elapsedTime), _velocity);
+#endif // DEBUG
+    _robot_node->setTranslation(_position);
+    _robot_node->setRotation(Vector3(0.0, 1.0, 0.0), MATH_DEG_TO_RAD(_rotation.y));
+    Node* robot_v = _robot_node->findNode("robot_v");
+    if (!robot_v)
+    {
+        throw GNullPointerException("Failed to find \"robot_v\" node");
+    }
+    robot_v->setRotation(Vector3(1.0, 0.0, 0.0), MATH_DEG_TO_RAD(_rotation.x));
+    Node* robot_h = _robot_node->findNode("robot_h");
+    if (!robot_h)
+    {
+        throw GNullPointerException("Failed to find \"robot_h\" node");
+    }
+    robot_h->setRotation(Vector3(0.0, 0.0, 1.0), MATH_DEG_TO_RAD(_rotation.z));
+}
+
+//----------------------------------------------------------------------
+//
+// setRoll()
+//
+//----------------------------------------------------------------------
+void Robot::setVelocity(float velocityPercent)
+{
+    _velocity_setpoint = velocityPercent * _max_velocity;
+}
+
+//----------------------------------------------------------------------
+//
+// setRoll()
+//
+//----------------------------------------------------------------------
+void Robot::setRoll(float roll)
+{
+    _rotation.y = roll;
+}
+
+//----------------------------------------------------------------------
+//
+// setPitch()
+//
+//----------------------------------------------------------------------
+void Robot::setPitch(float pitch)
+{
+    _rotation.x = pitch;
+}
+
+//----------------------------------------------------------------------
+//
+// setYaw()
+//
+//----------------------------------------------------------------------
+void Robot::setYaw(float yaw)
+{
+    _rotation.z = yaw;
+}
+
+//----------------------------------------------------------------------
+//
 // Serialize()
 //
 //----------------------------------------------------------------------
@@ -137,9 +228,19 @@ void Robot::Deserialize(Json::Value &root)
     _bundle_file = root.get("bundle", "").asCString();
     _texture_map_file = root.get("textureMap", "").asCString();
     _top_node_id = root.get("topNodeId", "").asCString();
-    _origin_offset_x = root.get("originOffsetX", 0.0).asDouble();
-    _origin_offset_y = root.get("originOffsetY", 0.0).asDouble();
-    _origin_offset_z = root.get("originOffsetZ", 0.0).asDouble();
+    _origin_offset.x = root.get("originOffsetX", 0.0).asDouble();
+    _origin_offset.y = root.get("originOffsetY", 0.0).asDouble();
+    _origin_offset.z = root.get("originOffsetZ", 0.0).asDouble();
+    _position.x = root.get("positionX", 0.0).asDouble();
+    _position.y = root.get("positionY", 0.0).asDouble();
+    _position.z = root.get("positionZ", 0.0).asDouble();
+    _rotation.x = root.get("rotationX", 0.0).asDouble();
+    _rotation.y = root.get("rotationY", 0.0).asDouble();
+    _rotation.z = root.get("rotationZ", 0.0).asDouble();
+    _velocity = root.get("velocity", 0.0).asDouble();
+    _velocity_setpoint = root.get("velocitySetpoint", 0.0).asDouble();
+    _max_acceleration = root.get("maxAcceleration", 0.0).asDouble();
+    _max_velocity = root.get("maxVelocity", 0.0).asDouble();
     // load robot
 #ifdef DEBUG
     fprintf(stderr, "[Debug] Loading robot model from GPB \"%s\"\n", (const char*)_bundle_file);
@@ -150,8 +251,13 @@ void Robot::Deserialize(Json::Value &root)
     {
     //        _catapult_node = robot->findNode("Catapult");
         _robot_node = Node::create("Robot");
-        _robot_node->addChild(robot);
-        robot->setTranslation(_origin_offset_x, _origin_offset_y, _origin_offset_z);
+        Node* robot_h = Node::create("robot_h");
+        _robot_node->addChild(robot_h);
+        Node* robot_v = Node::create("robot_v");
+        robot_h->addChild(robot_v);
+        robot_v->addChild(robot);
+        robot->setTranslation(_origin_offset);
+        update(0.0);
 #ifdef DEBUG
         fprintf(stderr, "[Debug] Loaded model (%f, %f, %f)\n", _robot_node->getTranslationX(), _robot_node->getTranslationY(), _robot_node->getTranslationZ());
 #endif // DEBUG
@@ -173,9 +279,13 @@ Robot &Robot::operator=(const Robot &robot)
         _top_node_id = robot._top_node_id;
         _bundle_file = robot._bundle_file;
         _texture_map_file = robot._texture_map_file;
-        _origin_offset_x = robot._origin_offset_x;
-        _origin_offset_y = robot._origin_offset_y;
-        _origin_offset_z = robot._origin_offset_z;
+        _origin_offset = robot._origin_offset;
+        _position = robot._position;
+        _rotation = robot._rotation;
+        _velocity = robot._velocity;
+        _velocity_setpoint = robot._velocity_setpoint;
+        _max_acceleration = robot._max_acceleration;
+        _max_velocity = robot._max_velocity;
         if (robot._robot_node)
         {
             _robot_node = robot._robot_node->clone();

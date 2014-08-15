@@ -2,6 +2,10 @@
     "textureMapList" :
     [
         {
+            "node" : "AerialAssistField:SCORING_TABLE.*",
+            "texture" : "res/textures/dark_gray.png"
+        },
+        {
             "node" : "AerialAssistField:TAPE_ZONE_MIDDLE_1",
             "texture" : "res/textures/white.png"
         },

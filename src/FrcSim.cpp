@@ -41,6 +41,7 @@ AerialAssist game;
 
 const GFileName AerialAssist::_kFieldBundle = "res/models/AerialAssistField.gpb";
 const GFileName AerialAssist::_kFieldTextureMap = "/res/data/AerialAssistFieldTextureMap.json";
+const float AerialAssist::_joystickDeadband = 0.05;
 const int AerialAssist::kHudWidth = 320;
 const int AerialAssist::kHudHeight = 200;
 
@@ -53,10 +54,9 @@ AerialAssist::AerialAssist() :
     _spotlight_node(NULL),
     _scene(NULL),
     _spotlight(NULL),
-    _offscreen_framebuffer(NULL),
     _robot(NULL),
     _font(NULL),
-    _blank(NULL),
+    _gamepad(NULL),
     _elapsedTime(0.0),
     _active_camera(DriverStation),
     _hud_camera(Overhead),
@@ -76,13 +76,7 @@ AerialAssist::AerialAssist() :
 //----------------------------------------------------------------------
 void AerialAssist::initialize()
 {
-    // create offscreen framebuffer for use by HUD camera view
-    _offscreen_framebuffer = FrameBuffer::create("hud", getWidth(), getHeight());
-#ifdef DEBUG
-    fprintf(stderr, "[Debug] Created offscreen framebuffer with RenderTarget of %s\n", (_offscreen_framebuffer->getRenderTargetCount()?_offscreen_framebuffer->getRenderTarget()->getId():"NULL"));
-#endif // DEBUG
-    
-    _blank = SpriteBatch::create("res/textures/black.png");
+    _gamepad = getGamepad(0);
     
 	// Create the font and scene
     _font = Font::create("res/ui/arial.gpb");
@@ -118,10 +112,6 @@ void AerialAssist::initialize()
         GFileName textureMap = resPath + _robot->getTextureMapFile();
         loadTextureMap((const char*)textureMap);
         _scene->addNode(robot_node);
-        
-        // $$$ FIX ME - Set robot to midcourt for now
-        robot_node->setTranslation(Vector3(0, 0, 0));
-        robot_node->setRotation(Vector3(1.0, 1.0, 1.0), 0.0);
         
         Node* chase_node = createCamera("Chase", &_camera[Chase]);
         robot_node->addChild(chase_node);
@@ -293,7 +283,6 @@ void AerialAssist::setMaterial(Node* node_ptr, const char* diffuse_string_ptr, c
 //----------------------------------------------------------------------
 void AerialAssist::finalize()
 {
-    SAFE_RELEASE(_offscreen_framebuffer);
     SAFE_RELEASE(_spotlight);
     SAFE_RELEASE(_spotlight_node);
     SAFE_RELEASE(_scene);
@@ -429,32 +418,74 @@ void AerialAssist::loadTextureMap(const string &filename)
 void AerialAssist::update(float elapsedTime)
 {
     _elapsedTime += elapsedTime;
+    float throttle = 0.0;
 #ifdef DEBUG
-//    fprintf(stderr, "[Trace] elapsedTime=%f\n", _elapsedTime / 1000.0);
+//    fprintf(stderr, "[Trace] elapsedTime=%8.5f, runtime=%8.5f\n", elapsedTime, _elapsedTime / 1000.0);
 #endif // DEBUG
-    Node* robot_node = NULL;
-    if (_robot)
-    {
-        robot_node = _robot->getNode();
-    }
     
-    if (robot_node)
+    if (_gamepad)
     {
-//        robot_node->setTranslationY(sin(_elapsedTime / 1500.0) * 150);
-        Node* catapult_node = robot_node->findNode("Catapult");
-        if (catapult_node)
+        Vector2 left_stick, right_stick;
+        float left_trigger = 0.0, right_trigger = 0.0;
+        Form *gamepadForm = _gamepad->getForm();
+        bool virtualGamepad = (gamepadForm && gamepadForm->isEnabled());
+        if (!gamepadForm || virtualGamepad)
         {
-            catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
+            if (_gamepad->getTriggerCount() > 0)
+            {
+                left_trigger = _gamepad->getTriggerValue(0);
+            }
+            if (_gamepad->getTriggerCount() > 1)
+            {
+                right_trigger = _gamepad->getTriggerValue(1);
+            }
+            if (_gamepad->getJoystickCount() > 0)
+            {
+                _gamepad->getJoystickValues(0, &left_stick);
+            }
+            if (_gamepad->getJoystickCount() > 1)
+            {
+                _gamepad->getJoystickValues(1, &right_stick);
+            }
+            if (!isInDeadband(right_trigger))
+            {
+                throttle = right_trigger;
+            }
+            else if (!isInDeadband(left_trigger))
+            {
+                throttle = -1.0 * left_trigger;
+            }
+#ifdef DEBUG
+            fprintf(stderr, "[Debug] Reading from gamepad 0 with %d joysticks and %d triggers: left (%4.2f, %4.2f), right (%4.2f, %4.2f), left_trig (%4.2f), right_trig (%4.2f)\n", _gamepad->getJoystickCount(), _gamepad->getTriggerCount(), left_stick.x, left_stick.y, right_stick.x, right_stick.y, left_trigger, right_trigger);
+#endif // DEBUG
         }
     }
     
-    Node* cam_node = _scene->findNode("Overhead");
-    if (cam_node && robot_node)
+    Node* robot_node = NULL;
+    if (_robot)
     {
-        float robot_pos_x = robot_node->getTranslationX();
-        float robot_pos_y = robot_node->getTranslationY();
-        cam_node->setTranslationX(robot_pos_x);
-        cam_node->setTranslationY(robot_pos_y);
+        // Update the robot's position
+        _robot->setVelocity(throttle);
+        _robot->update(elapsedTime / 1000.0);
+        
+        robot_node = _robot->getNode();
+        if (robot_node)
+        {
+            Node* catapult_node = robot_node->findNode("Catapult");
+            if (catapult_node)
+            {
+                catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
+            }
+        }
+    }
+    
+    // Keep the overhead camera centered directly above the robot (looking down)
+    Node* cam_node = _scene->findNode("Overhead");
+    if (cam_node && _robot)
+    {
+        Vector3 pos = _robot->getPosition();
+        cam_node->setTranslationX(pos.x);
+        cam_node->setTranslationY(pos.y);
     }
 }
 
@@ -465,23 +496,25 @@ void AerialAssist::update(float elapsedTime)
 //----------------------------------------------------------------------
 void AerialAssist::render(float elapsedTime)
 {
-    
-    // Clear the color and depth buffers
-    clear(CLEAR_COLOR_DEPTH, Vector4(0.0, 0.0, 0.0, 1.0), 1.0f, 0);
-    
     Rectangle default_viewport = getViewport();
     drawScreen(_active_camera);
     
-//    _blank->start();
-//    _blank->draw(Rectangle(getWidth() - kHudWidth - 12, 8, kHudWidth + 4, kHudHeight + 4), Rectangle(0, 0, 1, 1), Vector4::one());
-//    _blank->finish();
-    Rectangle hud(getWidth() - kHudWidth - 10, getHeight() - 10 - kHudHeight, kHudWidth, kHudHeight);
-    setViewport(hud);
+    Rectangle hud_position(getWidth() - kHudWidth - 10, getHeight() - 10 - kHudHeight, kHudWidth, kHudHeight);
+    setViewport(hud_position);
+    glScissor(hud_position.x, hud_position.y, hud_position.width, hud_position.height);
+    glEnable(GL_SCISSOR_TEST);
     drawScreen(_hud_camera);
     setViewport(default_viewport);
+    glDisable(GL_SCISSOR_TEST);
     
     // draw the frame rate
     drawFrameRate(_font, Vector4::one(), 5, 1, getFrameRate());
+    
+    // draw virtual gamepad
+    if (_gamepad)
+    {
+        _gamepad->draw();
+    }
 }
 
 //----------------------------------------------------------------------
@@ -491,6 +524,9 @@ void AerialAssist::render(float elapsedTime)
 //----------------------------------------------------------------------
 void AerialAssist::drawScreen(CameraPosition camera)
 {
+    // Clear the color and depth buffers
+    clear(CLEAR_COLOR_DEPTH, Vector4(0.0, 0.0, 0.0, 1.0), 1.0f, 0);
+    
     _scene->setActiveCamera(_camera[camera]);
     
     // Visit all the nodes in the scene to build our render queues, we have to
@@ -656,4 +692,19 @@ void AerialAssist::touchEvent(Touch::TouchEvent evt, int x, int y, unsigned int 
     case Touch::TOUCH_MOVE:
         break;
     };
+}
+
+//----------------------------------------------------------------------
+//
+// isInDeadband()
+//
+//----------------------------------------------------------------------
+bool AerialAssist::isInDeadband(float value) const
+{
+    bool rc = false;
+    if (value > (-1.0 * _joystickDeadband) && value < _joystickDeadband)
+    {
+        rc = true;
+    }
+    return rc;
 }

@@ -18,6 +18,7 @@ public:
 
     const static GFileName _kFieldBundle;
     const static GFileName _kFieldTextureMap;
+    const static float _joystickDeadband;
 
     enum CameraPosition
     {
@@ -58,12 +59,12 @@ protected:
     /**
      * @see Game::update
      */
-    void update(float elapsedTime);
+    virtual void update(float elapsedTime);
 
     /**
      * @see Game::render
      */
-    void render(float elapsedTime);
+    virtual void render(float elapsedTime);
     
     /**
      * Draws the screen by visitin each node in the model.
@@ -86,14 +87,17 @@ protected:
      */
     static void drawFrameRate(Font* font, const Vector4& color, unsigned int x, unsigned int y, unsigned int fps);
     
+    /**
+     *
+     */
+    bool isInDeadband(float value) const;
+    
     // render variables & methods
     Node* _spotlight_node;
     
     Camera* _camera[CameraCount];
     
     Light* _spotlight;
-    
-    FrameBuffer* _offscreen_framebuffer;
     
     Robot *_robot;
     
@@ -155,7 +159,7 @@ private:
     
     Font* _font;
     
-    SpriteBatch* _blank;
+    Gamepad* _gamepad;
     
     bool _wireframe;
     
