@@ -18,14 +18,17 @@ public:
 
     const static GFileName _kFieldBundle;
     const static GFileName _kFieldTextureMap;
+    const static GFileName _kSceneFile;
     const static float _joystickDeadband;
 
     enum CameraPosition
     {
-        DriverStation = 0,
+        High = 0,
+        DriverStation,
         Overhead,
         Chase,
-        Side,
+        RightSide,
+        LeftSide,
         CameraCount
     };
     
@@ -38,12 +41,24 @@ public:
      * @see Game::keyEvent
      */
 	void keyEvent(Keyboard::KeyEvent evt, int key);
+    
+    /**
+     * Return a pointer to the current scene.
+     *
+     * @return pointer to the game's scene
+     */
+    Scene* getScene() const { return _scene; }
 	
     /**
      * @see Game::touchEvent
      */
     void touchEvent(Touch::TouchEvent evt, int x, int y, unsigned int contactIndex);
 
+    /**
+     * @see Game::gamepadEvent
+     */
+    void gamepadEvent(Gamepad::GamepadEvent evt, Gamepad* gamepad);
+    
 protected:
 
     /**
@@ -162,6 +177,10 @@ private:
     Gamepad* _gamepad;
     
     bool _wireframe;
+    
+    bool _physicsDebug;
+    
+    bool _ball_in_play;
     
     bool _view_frustrum_culling;
     

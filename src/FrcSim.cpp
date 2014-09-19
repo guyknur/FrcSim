@@ -41,6 +41,7 @@ AerialAssist game;
 
 const GFileName AerialAssist::_kFieldBundle = "res/models/AerialAssistField.gpb";
 const GFileName AerialAssist::_kFieldTextureMap = "/res/data/AerialAssistFieldTextureMap.json";
+const GFileName AerialAssist::_kSceneFile = "res/frcsim.scene";
 const float AerialAssist::_joystickDeadband = 0.05;
 const int AerialAssist::kHudWidth = 320;
 const int AerialAssist::kHudHeight = 200;
@@ -58,9 +59,11 @@ AerialAssist::AerialAssist() :
     _font(NULL),
     _gamepad(NULL),
     _elapsedTime(0.0),
-    _active_camera(DriverStation),
+    _active_camera(High),
     _hud_camera(Overhead),
     _wireframe(false),
+    _physicsDebug(true),
+    _ball_in_play(false),
     _view_frustrum_culling(true)
 {
     for (int i = 0; i < CameraCount; i++)
@@ -100,47 +103,87 @@ void AerialAssist::initialize()
     Bundle* field_bundle_ptr = Bundle::create(AerialAssistField);
 
     // create scene
-    _scene = field_bundle_ptr->loadScene();
-    
-    // set ambient light color
-    _scene->setAmbientColor(0.25f, 0.25f, 0.25f);
+    _scene = Scene::load(_kSceneFile);
     
     _robot = new Robot("/res/data/AerialAssist2028.json");
     Node *robot_node = _robot->getNode();
     if (robot_node)
     {
+        _scene->addNode(robot_node);
         GFileName textureMap = resPath + _robot->getTextureMapFile();
         loadTextureMap((const char*)textureMap);
-        _scene->addNode(robot_node);
+        
+        PhysicsCharacter* character = dynamic_cast<PhysicsCharacter*>(robot_node->getCollisionObject());
+        if (character)
+        {
+            character->setMaxSlopeAngle(0.0);
+            character->setMaxStepHeight(0.0);
+            character->setVelocity(Vector3::zero());
+            character->setForwardVelocity(0.0);
+            character->setRightVelocity(0.0);
+        }
         
         Node* chase_node = createCamera("Chase", &_camera[Chase]);
         robot_node->addChild(chase_node);
-        chase_node->setTranslation(0.0, 108.0, 36.0);
+        chase_node->setTranslation(0.0, 36.0, -108.0);
+        Node *vert = chase_node->findNode("camera_v");
+        if (vert)
+        {
+            vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(0));
+        }
         
-        Node* side_node = createCamera("Side", &_camera[Side]);
+        Node* side_node = createCamera("RightSide", &_camera[RightSide]);
         robot_node->addChild(side_node);
-        side_node->setTranslation(-84.0, 0.0, 24.0);
+        side_node->setTranslation(-84.0, 0, 24.0);
         Node *hor = side_node->findNode("camera_h");
         if (hor)
         {
-            hor->setRotation(Vector3(0.0f, 0.0f, 1.0f), MATH_DEG_TO_RAD(-90));
+            hor->setRotation(Vector3(0.0f, 1.0f, 0.0f), MATH_DEG_TO_RAD(-90));
         }
+//        vert = side_node->findNode("camera_v");
+//        if (vert)
+//        {
+//            vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(90));
+//        }
+        
+        side_node = createCamera("LeftSide", &_camera[LeftSide]);
+        robot_node->addChild(side_node);
+        side_node->setTranslation(84.0, 0, 24.0);
+        hor = side_node->findNode("camera_h");
+        if (hor)
+        {
+            hor->setRotation(Vector3(0.0f, 1.0f, 0.0f), MATH_DEG_TO_RAD(90));
+        }
+//        vert = side_node->findNode("camera_v");
+//        if (vert)
+//        {
+//            vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(90));
+//        }
     }
     
 #ifdef DEBUG
     fprintf(stderr, "[Debug] Creating cameras\n");
 #endif // DEBUG
+    Node* high = createCamera("High", &_camera[High]);
+    high->setTranslation(0.0, 300.0, -600);
+    _scene->addNode(high);
+    Node *vert = high->findNode("camera_v");
+    if (vert)
+    {
+        vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-35));
+    }
+    
     Node* camera = createCamera("Driver", &_camera[DriverStation]);
-    camera->setTranslation(0.0, 384.0, 58.0);
+    camera->setTranslation(0.0, 58, -384.0);
     _scene->addNode(camera);
     
     Node* overhead = createCamera("Overhead", &_camera[Overhead]);
-    overhead->setTranslation(0.0, 0.0, 180.0);
+    overhead->setTranslation(0.0, 180.0, 0.0);
     _scene->addNode(overhead);
-    Node *vert = overhead->findNode("camera_v");
+    vert = overhead->findNode("camera_v");
     if (vert)
     {
-        vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(180));
+        vert->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
     }
     
 #ifdef DEBUG
@@ -151,8 +194,8 @@ void AerialAssist::initialize()
 	_spotlight = Light::createSpot(Vector3::one(), 2500.0f, MATH_DEG_TO_RAD(0.001), MATH_DEG_TO_RAD(40.0));
 	_spotlight_node = Node::create("spotLight");
 	_spotlight_node->setLight(_spotlight);
-    _spotlight_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(0));
-	_spotlight_node->setTranslation(0.0f, 0.0f, 750.0f);
+    _spotlight_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
+	_spotlight_node->setTranslation(0.0, 750.0, 0.0);
 	_scene->addNode(_spotlight_node);
     
 #ifdef DEBUG
@@ -163,6 +206,17 @@ void AerialAssist::initialize()
     
     // Add a floor to the scene
     createFloorModel();
+    
+    // Move ball onto field
+    Node* blue_ball = _scene->findNode("GAME_BALL_BLUE_1");
+    if (blue_ball)
+    {
+        PhysicsCollisionObject* physics = blue_ball->getCollisionObject();
+        if (physics)
+        {
+            physics->setEnabled(false);
+        }
+    }
 }
 
 //----------------------------------------------------------------------
@@ -175,12 +229,13 @@ Node* AerialAssist::createCamera(const GString &cameraName, Camera** camera)
     Node *camera_node = Node::create((const char*)cameraName);
     Node *camera_h_node = Node::create("camera_h");
     camera_node->addChild(camera_h_node);
-    camera_node->setRotation(Vector3(0.0f, 1.0f, 0.0f), MATH_DEG_TO_RAD(180));
+    camera_node->setRotation(Vector3(0.0, 0.0, 1.0), MATH_DEG_TO_RAD(0));
     Node *camera_v_node = Node::create("camera_v");
     camera_h_node->addChild(camera_v_node);
+    camera_h_node->setRotation(Vector3(0.0, 1.0, 0.0), MATH_DEG_TO_RAD(180));
     *camera = Camera::createPerspective(50.0f, getAspectRatio(), 1.0f, 2000.0f);
     camera_v_node->setCamera(*camera);
-    camera_v_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
+    camera_v_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(0));
     return camera_node;
 }
 
@@ -308,7 +363,7 @@ Node* AerialAssist::createFloorModel(void)
     // create material
     setMaterial(floor, "res/textures/brown.png", NULL, 0.0f);
     
-    // set position (converting ornament 2D space into model 3D space)
+    // set position
     float x = 0;
     float y = 0;
     float z = 0;
@@ -316,6 +371,15 @@ Node* AerialAssist::createFloorModel(void)
 //    floor->release();
     SAFE_RELEASE(tile_model_ptr);
     SAFE_RELEASE(tile_mesh_ptr);
+    
+    // Enable physics for floor
+    PhysicsRigidBody::Parameters rbParams;
+    rbParams.mass = 0.0f;
+    rbParams.friction = 0.5f;
+    rbParams.restitution = 0.75f;
+    rbParams.linearDamping = 0.025f;
+    rbParams.angularDamping = 0.16f;
+    floor->setCollisionObject(PhysicsCollisionObject::RIGID_BODY, PhysicsCollisionShape::box(Vector3(1000.0, 0.01, 1000.0)), &rbParams);
     return floor;
 }
 
@@ -328,13 +392,13 @@ Mesh* AerialAssist::createFloorMesh(void)
 {
     float vertices[] =
     {
-        // bottom (-z)
-        -500, -500, 0.0,   0, 0, 1,   0, 0,
-         500, -500, 0.0,   0, 0, 1,   1, 0,
-        -500,  500, 0.0,   0, 0, 1,   0, 1,
-        -500,  500, 0.0,   0, 0, 1,   0, 1,
-         500, -500, 0.0,   0, 0, 1,   1, 0,
-         500,  500, 0.0,   0, 0, 1,   1, 1
+        // bottom (-y)
+        -500.0, 0.0,  500.0,  0, 1, 0,   0, 0,
+         500.0, 0.0,  500.0,  0, 1, 0,   1, 0,
+        -500.0, 0.0, -500.0,  0, 1, 0,   0, 1,
+        -500.0, 0.0, -500.0,  0, 1, 0,   0, 1,
+         500.0, 0.0,  500.0,  0, 1, 0,   1, 0,
+         500.0, 0.0, -500.0,  0, 1, 0,   1, 1
     };
     unsigned int vertexCount = 6;
     unsigned int indexCount = 6;
@@ -419,12 +483,25 @@ void AerialAssist::update(float elapsedTime)
 {
     _elapsedTime += elapsedTime;
     float throttle = 0.0;
+    float brake = 0.0;
 #ifdef DEBUG
 //    fprintf(stderr, "[Trace] elapsedTime=%8.5f, runtime=%8.5f\n", elapsedTime, _elapsedTime / 1000.0);
 #endif // DEBUG
-    
+    Node* blue_ball = _scene->findNode("GAME_BALL_BLUE_1");
+   
     if (_gamepad)
     {
+        if (_gamepad->isButtonDown(Gamepad::BUTTON_A))
+        {
+            if (blue_ball && !_ball_in_play)
+            {
+                blue_ball->setTranslation(126.0, 0.0, 156.0);
+                blue_ball->setCollisionObject("res/frcsim.physics#ball");
+                PhysicsCollisionObject* ball_physics = blue_ball->getCollisionObject();
+                ball_physics->setEnabled(true);
+                _ball_in_play = true;
+            }
+        }
         Vector2 left_stick, right_stick;
         float left_trigger = 0.0, right_trigger = 0.0;
         Form *gamepadForm = _gamepad->getForm();
@@ -456,7 +533,7 @@ void AerialAssist::update(float elapsedTime)
                 throttle = -1.0 * left_trigger;
             }
 #ifdef DEBUG
-            fprintf(stderr, "[Debug] Reading from gamepad 0 with %d joysticks and %d triggers: left (%4.2f, %4.2f), right (%4.2f, %4.2f), left_trig (%4.2f), right_trig (%4.2f)\n", _gamepad->getJoystickCount(), _gamepad->getTriggerCount(), left_stick.x, left_stick.y, right_stick.x, right_stick.y, left_trigger, right_trigger);
+//            fprintf(stderr, "[Debug] Reading from gamepad 0 with %d joysticks and %d triggers: left (%4.2f, %4.2f), right (%4.2f, %4.2f), left_trig (%4.2f), right_trig (%4.2f)\n", _gamepad->getJoystickCount(), _gamepad->getTriggerCount(), left_stick.x, left_stick.y, right_stick.x, right_stick.y, left_trigger, right_trigger);
 #endif // DEBUG
         }
     }
@@ -464,17 +541,18 @@ void AerialAssist::update(float elapsedTime)
     Node* robot_node = NULL;
     if (_robot)
     {
-        // Update the robot's position
         _robot->setVelocity(throttle);
+        
+        // Update the robot's position
         _robot->update(elapsedTime / 1000.0);
         
         robot_node = _robot->getNode();
         if (robot_node)
-        {
+        {          
             Node* catapult_node = robot_node->findNode("Catapult");
             if (catapult_node)
             {
-                catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), abs(sin(_elapsedTime / 500) * 1.5));
+                catapult_node->setRotation(Vector3(1.0f, 0.0f, 0.0f), MATH_DEG_TO_RAD(-90));
             }
         }
     }
@@ -485,7 +563,7 @@ void AerialAssist::update(float elapsedTime)
     {
         Vector3 pos = _robot->getPosition();
         cam_node->setTranslationX(pos.x);
-        cam_node->setTranslationY(pos.y);
+        cam_node->setTranslationZ(pos.z);
     }
 }
 
@@ -498,6 +576,12 @@ void AerialAssist::render(float elapsedTime)
 {
     Rectangle default_viewport = getViewport();
     drawScreen(_active_camera);
+    
+    // Draw physics debug
+    if (_physicsDebug)
+    {
+        getPhysicsController()->drawDebug(_scene->getActiveCamera()->getViewProjectionMatrix());
+    }
     
     Rectangle hud_position(getWidth() - kHudWidth - 10, getHeight() - 10 - kHudHeight, kHudWidth, kHudHeight);
     setViewport(hud_position);
@@ -602,10 +686,13 @@ bool AerialAssist::buildRenderQueues(Node* node)
 bool AerialAssist::setSceneMaterial(Node* node)
 {
     // If the node visited contains a model, draw it
+    string id = node->getId();    
+#ifdef DEBUG
+    fprintf(stderr, "[Debug]\tSetting material for node \"%s\"\n", id.c_str());
+#endif // DEBUG
     Model* model = node->getModel();
     if (model)
     {
-        string id = node->getId();
         string texture = "res/textures/gray.png";
         bool transparent = false;
         map<string, GPair<string, bool> >::const_iterator it;
@@ -623,7 +710,7 @@ bool AerialAssist::setSceneMaterial(Node* node)
             }
         }
 #ifdef DEBUG
-        fprintf(stderr, "[Debug]\tSetting %smaterial for node \"%s\" to \"%s\"\n", (transparent?"transparent ":""), id.c_str(), texture.c_str());
+//        fprintf(stderr, "[Debug]\tSetting %smaterial for node \"%s\" to \"%s\"\n", (transparent?"transparent ":""), id.c_str(), texture.c_str());
 #endif // DEBUG
         if (transparent)
         {
@@ -660,6 +747,33 @@ void AerialAssist::keyEvent(Keyboard::KeyEvent evt, int key)
 // getNextCamera()
 //
 //----------------------------------------------------------------------
+void AerialAssist::gamepadEvent(Gamepad::GamepadEvent evt, Gamepad* gamepad)
+{
+    switch(evt)
+    {
+        case Gamepad::BUTTON_EVENT:
+        case Gamepad::JOYSTICK_EVENT:
+        case Gamepad::TRIGGER_EVENT:
+            break;
+        case Gamepad::DISCONNECTED_EVENT:
+#ifdef DEBUG
+            fprintf(stderr, "[Debug] Gamepad disconnected event received\n");
+#endif // DEBUG
+            break;
+        case Gamepad::CONNECTED_EVENT:
+#ifdef DEBUG
+            fprintf(stderr, "[Debug] Gamepad connected event received\n");
+#endif // DEBUG
+            _gamepad = getGamepad(0);
+            break;
+    }
+}
+
+//----------------------------------------------------------------------
+//
+// getNextCamera()
+//
+//----------------------------------------------------------------------
 AerialAssist::CameraPosition AerialAssist::getNextCamera(AerialAssist::CameraPosition current) const
 {
     int cam = (int)current;
@@ -667,7 +781,7 @@ AerialAssist::CameraPosition AerialAssist::getNextCamera(AerialAssist::CameraPos
     {
         if (++cam == (int)CameraCount)
         {
-            cam = (int)DriverStation;
+            cam = 0;
         }
     }
     while (_camera[current] == NULL);

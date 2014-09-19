@@ -36,6 +36,7 @@ using namespace gameplay;
 
 #include "json/IJsonSerializable.h"
 #include "Robot.h"
+#include "FrcSim.h"
 
 #ifdef ANDROID
 #include <android/log.h>
@@ -52,7 +53,8 @@ Robot::Robot() :
     _velocity(0.0),
     _velocity_setpoint(0.0),
     _max_acceleration(0.0),
-    _max_velocity(0.0)
+    _max_velocity(0.0),
+    _mass(0.0)
 {
 }
 
@@ -69,7 +71,8 @@ Robot::Robot(const Robot &robot) :
     _velocity(robot._velocity),
     _velocity_setpoint(robot._velocity_setpoint),
     _max_acceleration(robot._max_acceleration),
-    _max_velocity(robot._max_velocity)
+    _max_velocity(robot._max_velocity),
+    _mass(robot._mass)
 {
     if (robot._robot_node)
     {
@@ -87,7 +90,8 @@ Robot::Robot(const GFileName &configFile) :
     _velocity(0.0),
     _velocity_setpoint(0.0),
     _max_acceleration(0.0),
-    _max_velocity(0.0)
+    _max_velocity(0.0),
+    _mass(0.0)
 {
     LoadConfig(configFile);
 }
@@ -133,40 +137,43 @@ void Robot::update(float elapsedTime) throw(GNullPointerException)
 {
     if (!_robot_node)
     {
-        throw GNullPointerException("Robot node not found.");
+        return;
     }
-    float accel = abs(_velocity_setpoint) - abs(_velocity);
-    float dir = 1.0;
-    if ((_velocity_setpoint - _velocity) < 0)
+    if (_velocity_setpoint < _velocity)
     {
-        dir = -1.0;
-    }
-    if (abs(accel) > _max_acceleration)
-    {
-        accel = abs(_max_acceleration);
+        _velocity += (_max_acceleration * elapsedTime);
+        if (_velocity > _velocity_setpoint)
+        {
+            _velocity = _velocity_setpoint;
+        }
     }
     else
     {
-        accel = abs(accel);
+        _velocity -= (_max_acceleration * elapsedTime);
+        if (_velocity < _velocity_setpoint)
+        {
+            _velocity = _velocity_setpoint;
+        }
     }
-    _velocity = _velocity + (dir * accel * elapsedTime);
+    _position = _robot_node->getTranslationWorld();
+    PhysicsCharacter* character = dynamic_cast<PhysicsCharacter*>(_robot_node->getCollisionObject());
+    if (character)
+    {
+        if (_velocity == 0.0)
+        {
+            character->setVelocity(Vector3::zero());
+            character->setForwardVelocity(0.0);
+            character->setRightVelocity(0.0);
+        }
+        else
+        {
+            character->setForwardVelocity(_velocity);
+        }
 #ifdef DEBUG
-    fprintf(stderr, "[Debug] %6.4f: Velocity changed by %6.4f and is now %6.4f\n", elapsedTime, (dir * accel * elapsedTime), _velocity);
+        Vector3 velocity = character->getCurrentVelocity();
+        fprintf(stderr, "[Debug] %5.2f: Robot facing is %5.2f, distance: %4.2f, velocity: (%f, %f, %f), location: (%5.2f, %5.2f, %5.2f)\n", elapsedTime, getYaw(), _velocity, velocity.x, velocity.y, velocity.z, _position.x, _position.y, _position.z);
 #endif // DEBUG
-    _robot_node->setTranslation(_position);
-    _robot_node->setRotation(Vector3(0.0, 1.0, 0.0), MATH_DEG_TO_RAD(_rotation.y));
-    Node* robot_v = _robot_node->findNode("robot_v");
-    if (!robot_v)
-    {
-        throw GNullPointerException("Failed to find \"robot_v\" node");
     }
-    robot_v->setRotation(Vector3(1.0, 0.0, 0.0), MATH_DEG_TO_RAD(_rotation.x));
-    Node* robot_h = _robot_node->findNode("robot_h");
-    if (!robot_h)
-    {
-        throw GNullPointerException("Failed to find \"robot_h\" node");
-    }
-    robot_h->setRotation(Vector3(0.0, 0.0, 1.0), MATH_DEG_TO_RAD(_rotation.z));
 }
 
 //----------------------------------------------------------------------
@@ -241,15 +248,25 @@ void Robot::Deserialize(Json::Value &root)
     _velocity_setpoint = root.get("velocitySetpoint", 0.0).asDouble();
     _max_acceleration = root.get("maxAcceleration", 0.0).asDouble();
     _max_velocity = root.get("maxVelocity", 0.0).asDouble();
+    _mass = root.get("mass", 0.0).asDouble();
     // load robot
 #ifdef DEBUG
     fprintf(stderr, "[Debug] Loading robot model from GPB \"%s\"\n", (const char*)_bundle_file);
 #endif // DEBUG
+    Scene* scene = NULL;
+    AerialAssist* game = dynamic_cast<AerialAssist*>(Game::getInstance());
+    if (game)
+    {
+        scene = game->getScene();
+        if (scene)
+        {
+            _robot_node = scene->findNode(_top_node_id);
+        }
+    }
     Bundle *robot_bundle_ptr = Bundle::create(GFileName(FileSystem::getResourcePath()) + _bundle_file);
     Node* robot = robot_bundle_ptr->loadNode(_top_node_id)->clone();
     if (robot)
     {
-    //        _catapult_node = robot->findNode("Catapult");
         _robot_node = Node::create("Robot");
         Node* robot_h = Node::create("robot_h");
         _robot_node->addChild(robot_h);
@@ -257,11 +274,35 @@ void Robot::Deserialize(Json::Value &root)
         robot_h->addChild(robot_v);
         robot_v->addChild(robot);
         robot->setTranslation(_origin_offset);
-        update(0.0);
 #ifdef DEBUG
-        fprintf(stderr, "[Debug] Loaded model (%f, %f, %f)\n", _robot_node->getTranslationX(), _robot_node->getTranslationY(), _robot_node->getTranslationZ());
+        if (_robot_node)
+        {
+            fprintf(stderr, "[Debug] Loaded model (%f, %f, %f)\n", _robot_node->getTranslationX(), _robot_node->getTranslationY(), _robot_node->getTranslationZ());
+        }
 #endif // DEBUG
-    //        _scene->addNode(_robot_node);
+       // Enable physics for robot
+        _robot_node->setCollisionObject("res/frcsim.physics#robot");
+        PhysicsVehicle* vehicle = dynamic_cast<PhysicsVehicle*>(_robot_node->getCollisionObject());
+//        Node* wheel_front_right = _robot_node->findNode("Wheel - Front Right");
+//        if (wheel_front_right)
+//        {
+//            // Enable physics for wheel
+//            PhysicsRigidBody::Parameters rbParams;
+//            rbParams.mass = 0.5f;
+//            rbParams.friction = 0.5f;
+//            rbParams.restitution = 0.75f;
+//            rbParams.linearDamping = 0.025f;
+//            rbParams.angularDamping = 0.16f;
+//            wheel_front_right->setCollisionObject(PhysicsCollisionObject::VEHICLE_WHEEL, PhysicsCollisionShape::sphere(2.0), &rbParams);
+//            PhysicsVehicleWheel* wheel = dynamic_cast<PhysicsVehicleWheel*>(wheel_front_right->getCollisionObject());
+//            if (wheel)
+//            {
+//                vehicle->addWheel(wheel);
+//                wheel->setSteerable(false);
+//                wheel->setWheelAxle(Vector3(1.0, 0.0, 0.0));
+//                wheel->setWheelRadius(2.0);
+//            }
+//        }
     }
     SAFE_RELEASE(robot_bundle_ptr);
 }

@@ -174,6 +174,8 @@ protected:
     
     double _max_velocity;          /**< Maximum velocity in inches/sec                */
     
+    double _mass;                  /**< Mass of robot in pounds                       */
+    
 };
 
 #endif // _ROBOT

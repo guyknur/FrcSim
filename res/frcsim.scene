@@ -1,0 +1,39 @@
+scene
+{
+    path = res/models/AerialAssist.gpb
+
+    ambientColor = 0.25, 0.25, 0.25
+
+//    node AerialAssistRobot
+//    {
+//        collisionObject = res/frcsim.physics#robot
+//    }
+    
+//    node GAME_BALL_RED_1
+//    {
+//        collisionObject = res/frcsim.physics#ball
+//    }
+
+//    node GAME_BALL_BLUE_1
+//    {
+//        collisionObject = res/frcsim.physics#ball
+//    }
+    
+    // Red ball stand
+//    node GE_14063_2
+//    {
+//        collisionObject = res/frcsim.physics#staticMesh
+//    }
+
+    // Blue ball stand
+//    node GE_14063_1
+//    {
+//        collisionObject = res/frcsim.physics#staticMesh
+//    }
+
+    physics
+    {
+        // Game world is in inches, model gravity in inches per second per second
+        gravity = 0.0, -386.09, 0.0
+    }
+}

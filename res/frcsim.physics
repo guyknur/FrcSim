@@ -1,0 +1,123 @@
+collisionObject ball
+{
+    type = RIGID_BODY
+    
+    shape = SPHERE
+    
+    radius = 12
+    
+    mass = 4.5
+    friction = 0.5
+    restitution = 1.0
+    linearDamping = 0.1
+    angularDamping = 0.5
+}
+
+collisionObject nonkinematicBall : ball
+{
+    kinematic = false
+}
+
+collisionObject staticMesh
+{
+    type = RIGID_BODY
+    shape = MESH
+    mass = 0.0
+    friction = 0.5
+    restitution = 0.75
+    linearDamping = 0.025
+    angularDamping = 0.16
+}
+
+collisionObject staticBox
+{
+    type = RIGID_BODY
+    shape = BOX
+    mass = 0.0
+    friction = 0.5
+    restitution = 0.75
+    linearDamping = 0.025
+    angularDamping = 0.16
+}
+
+collisionObject robot
+{
+    type = CHARACTER
+
+    shape = BOX
+    mass = 140.0
+//    friction = 0.5
+//    restitution = 0.01
+//    linearDamping = 0.025
+//    angularDamping = 0.6
+
+//    steeringGain = 0.4
+//    brakingForce = 3500.0
+//    drivingForce = 20000.0
+
+//    steerdownSpeed = 1
+//    steerdownGain = 1
+//    brakedownStart = 100
+//    brakedownFull = 170
+//    drivedownStart = 105
+//    drivedownFull = 180
+//    boostSpeed = 1
+//    boostGain = 1
+//    downforce = 0
+    
+    extents = 26.75, 12, 30
+    center = 0, 17, -7
+}
+
+collisionObject wheel
+{
+    type = VEHICLE_WHEEL
+
+    steerable = false
+
+    shape = MESH
+    radius = 2.0
+    mass = 1.0
+    friction = 0.5
+    restitution = 0.01
+    linearDamping = 0.025
+    angularDamping = 0.16
+
+    wheelDirection = 0, -1, 0
+
+    strutRestLength = 0.6
+    strutStiffness = 25.0
+    strutDampingCompression = 5.1
+    strutDampingRelaxation = 2.3
+    frictionBreakout = 1000.0
+    wheelRadius = 2.0
+    rollInfluence = 0.1
+    
+    wheelDirection = 0, 0, -1
+}
+
+collisionObject wheelFrontRight : wheel
+{
+    strutConnectionOffset = -13.0, -11.5, -3.0
+    
+    center = 0,0,0
+    wheelAxle = -1, 0, 0
+}
+
+collisionObject wheelRearRight : wheel
+{
+    strutConnectionOffset = -13.0, 11.5, -3.0
+    wheelAxle = -1, 0, 0
+}
+
+collisionObject wheelFrontLeft : wheel
+{
+    strutConnectionOffset = 13.0, -11.5, -3.0
+    wheelAxle = 1, 0, 0
+}
+
+collisionObject wheelRearLeft : wheel
+{
+    strutConnectionOffset = 13.0, 11.5, -3.0
+    wheelAxle = 1, 0, 0
+}

@@ -4,9 +4,13 @@
     "topNodeId" : "AerialAssistRobot",
     "originOffsetX" : 0.0,
     "originOffsetY" : 0.0,
-    "originOffsetZ" : 21.0,
-    "maxAcceleration" : 5.0,
-    "maxVelocity" : 20.0,
+    "originOffsetZ" : 0.0,
+    "positionX" : 0.0,
+    "positionY" : 0.0,
+    "positionZ" : 0.0,
+    "maxAcceleration" : 8.0,
+    "maxVelocity" : 40.0,
+    "mass" : 140.0,
     "motionList" :
     [
         {
